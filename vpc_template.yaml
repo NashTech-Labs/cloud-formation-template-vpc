@@ -1,0 +1,228 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Description: This template will creates a vpc with two public and two private subnets
+
+# The following metadata is used to group the parameters
+Metadata:
+  AWS::CloudFormation::Interface: 
+    ParameterGroups:
+      - 
+        Label: 
+          default: "VPC CIDR"
+        Parameters: 
+          - VpcCIDR
+      - 
+        Label: 
+          default: "Subnet CIDR"
+        Parameters:
+          - PublicSubnetOneCIDR
+          - PublicSubnetTwoCIDR
+          - PrivateSubnetOneCIDR
+          - PrivateSubnetTwoCIDR
+      - 
+        Label: 
+          default: "SSH CIDR"
+        Parameters: 
+          - SSHLocation
+
+# Parameters are just like variable that is used to build flexible CloudFormation templates
+Parameters:
+  VpcCIDR:
+    Default: 10.101.0.0/16
+    Description: Please enter the IP range (CIDR notation) for this VPC
+    Type: String
+
+  PublicSubnetOneCIDR:
+    Default: 10.101.0.0/24
+    Description: Please enter the IP range (CIDR notation) for the public subnet one
+    Type: String
+
+  PublicSubnetTwoCIDR:
+    Default: 10.101.1.0/24
+    Description: Please enter the IP range (CIDR notation) for the public subnet two
+    Type: String
+
+  PrivateSubnetOneCIDR:
+    Default: 10.101.2.0/24
+    Description: Please enter the IP range (CIDR notation) for the private subnet one
+    Type: String
+
+  PrivateSubnetTwoCIDR:
+    Default: 10.101.3.0/24
+    Description: Please enter the IP range (CIDR notation) for the private subnet two
+    Type: String
+
+
+  SSHLocation:
+    Default: 10.101.0.0/16
+    Description: The IP address range that can be used to access the web server using SSH.
+    Type: String
+
+# Create Resources 
+Resources:
+# VPC
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCIDR
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      InstanceTenancy: default
+      Tags:
+        - Key: Name
+          Value: test-VPC
+
+# Internet Gateway
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: test-IGW
+
+# Attach Internet Gateway to VPC
+  InternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref VPC
+
+# Public Subnet One
+  PublicSubnetOne:
+    Type: AWS::EC2::Subnet
+    Properties:
+    # Select will list AZ and will choose zero index position AZ
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      CidrBlock: !Ref PublicSubnetOneCIDR
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: Public Subnet One
+      VpcId: !Ref VPC
+
+# Public Subnet Two
+  PublicSubnetTwo:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+      CidrBlock: !Ref PublicSubnetTwoCIDR
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: Public Subnet Two
+      VpcId: !Ref VPC
+
+# Route Table
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      Tags:
+        - Key: Name
+          Value: Public Route Table
+      VpcId: !Ref VPC
+
+# Add a Public Route to the Route Table
+  PublicRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+      RouteTableId: !Ref PublicRouteTable
+
+# Associate Public Subnet One with Public Route Table
+  PublicSubnetOneRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnetOne
+
+# Associate Public Subnet Two with Public Route Table
+  PublicSubnetTwoRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnetTwo
+
+# Private Subnet One
+  PrivateSubnetOne:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [ 0, !GetAZs  '' ]
+      CidrBlock: !Ref PrivateSubnetOneCIDR
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: Private Subnet One
+      VpcId: !Ref VPC
+
+# Create Private Subnet Two
+  PrivateSubnetTwo:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+      CidrBlock: !Ref PrivateSubnetTwoCIDR
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: Private Subnet Two
+      VpcId: !Ref VPC
+
+
+# Security Group for the SSH to instance
+  SSHSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: SSH Security Group
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref SSHLocation
+      Tags:
+        - Key: Name
+          Value: SSH Security Group
+      VpcId: !Ref VPC
+
+
+Outputs:
+# Export VPC ID
+  VPC:
+    Description: VPC ID
+    Export:
+      Name: !Sub ${AWS::StackName}-VPC
+    Value: !Ref VPC
+
+# Export Public Subnet One 
+  PublicSubnetOne:
+    Description: Public Subnet One ID
+    Export:
+      Name: !Sub ${AWS::StackName}-PublicSubnetOne
+    Value: !Ref PublicSubnetOne
+
+# Export Public Subnet Two
+  PublicSubnetTwo:
+    Description: Public Subnet Two ID
+    Export:
+      Name: !Sub ${AWS::StackName}-PublicSubnetTwo
+    Value: !Ref PublicSubnetTwo
+
+# Export Private Subnet One
+  PrivateSubnetOne:
+    Description: Private Subnet One ID
+    Export:
+      Name: !Sub ${AWS::StackName}-PrivateSubnetOne
+    Value: !Ref PrivateSubnetOne
+
+# Export Private Subnet Two
+  PrivateSubnetTwo:
+    Description: Private Subnet Two ID
+    Export:
+      Name: !Sub ${AWS::StackName}-PrivateSubnetTwo
+    Value: !Ref PrivateSubnetTwo
+
+# Export SSH Security Group ID
+  SSHSecurityGroup:
+    Description: SSH Security Group ID
+    Export:
+      Name: !Sub ${AWS::StackName}-SSHSecurityGroup
+    Value: !Ref SSHSecurityGroup
